@@ -109,13 +109,21 @@ export const LIFE_MODES: LifeMode[] = [
   },
 ];
 
+// MCP Server endpoints
+export const MCP_ENDPOINTS = {
+  food: "https://mcp.swiggy.com/food",
+  instamart: "https://mcp.swiggy.com/im",
+  dineout: "https://mcp.swiggy.com/dineout",
+} as const;
+
 export const MCP_SERVERS: Record<
   McpServer,
-  { label: string; blurb: string; tools: string[] }
+  { label: string; blurb: string; endpoint: string; tools: string[] }
 > = {
   food: {
     label: "Food MCP",
     blurb: "Restaurant discovery, menus, ordering, live delivery tracking.",
+    endpoint: MCP_ENDPOINTS.food,
     tools: [
       "food.search_restaurants",
       "food.get_menu",
@@ -127,6 +135,7 @@ export const MCP_SERVERS: Record<
   instamart: {
     label: "Instamart MCP",
     blurb: "Grocery discovery, pantry state, recurring orders, inventory suggestions.",
+    endpoint: MCP_ENDPOINTS.instamart,
     tools: [
       "instamart.search_products",
       "instamart.get_pantry_state",
@@ -138,6 +147,7 @@ export const MCP_SERVERS: Record<
   dineout: {
     label: "Dineout MCP",
     blurb: "Table availability, reservations, offers, date-night planning.",
+    endpoint: MCP_ENDPOINTS.dineout,
     tools: [
       "dineout.search_availability",
       "dineout.compare_ratings",
