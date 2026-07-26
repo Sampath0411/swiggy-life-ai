@@ -1,0 +1,10 @@
+{
+  "framework": null,
+  "buildCommand": "npm run build",
+  "outputDirectory": ".output",
+  "installCommand": "npm install",
+  "environment": {
+    "NITRO_PRESET": "vercel",
+    "LIFEOS_BASE_URL": "https://swiggy-life-ai.vercel.app"
+  }
+}
