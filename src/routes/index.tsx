@@ -122,6 +122,7 @@ function Landing() {
           </Link>
           <nav className="hidden items-center gap-7 text-sm text-muted-foreground md:flex">
             <a href="#problem" className="transition hover:text-foreground">Why</a>
+            <Link to="/agent" className="transition hover:text-foreground">Life Agent</Link>
             <a href="#modes" className="transition hover:text-foreground">Memberships</a>
             <a href="#mcp" className="transition hover:text-foreground">MCP</a>
             <a href="#demo" className="transition hover:text-foreground">Live demo</a>
@@ -138,6 +139,12 @@ function Landing() {
               className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:opacity-90"
             >
               Get started
+            </Link>
+            <Link
+              to="/agent"
+              className="rounded-xl border border-accent/40 bg-accent/10 px-4 py-2 text-sm font-semibold text-accent transition hover:bg-accent/20"
+            >
+              Life Agent
             </Link>
           </div>
         </div>

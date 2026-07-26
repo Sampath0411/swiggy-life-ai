@@ -118,6 +118,10 @@ function Dashboard() {
             <Link to="/" className="text-xs text-muted-foreground transition hover:text-foreground">
               ← Swiggy LifeOS
             </Link>
+            <span className="mx-2 text-xs text-muted-foreground/30">·</span>
+            <Link to="/agent" className="text-xs text-accent transition hover:text-foreground">
+              Agent Chat
+            </Link>
             <h1 className="mt-2 text-3xl font-bold">
               Good evening, Aarav. <span className="text-gradient">{active.name} Mode</span>
             </h1>
