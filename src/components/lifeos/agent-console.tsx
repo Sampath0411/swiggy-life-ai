@@ -68,7 +68,7 @@ export function AgentConsole({ compact = false }: { compact?: boolean }) {
     setMcpStatus("connecting");
     setMcpError(null);
     try {
-      const { initOAuth } = await import("@/server/functions/mcp");
+      const { initOAuth } = await import("@/lib/mcp-server-fn");
       const { authorizeUrl, state, codeVerifier } = await initOAuth();
       sessionStorage.setItem("swiggy_oauth_state", state);
       sessionStorage.setItem("swiggy_code_verifier", codeVerifier);
@@ -81,7 +81,7 @@ export function AgentConsole({ compact = false }: { compact?: boolean }) {
 
   const handleDisconnect = useCallback(async () => {
     try {
-      const { disconnectMcp } = await import("@/server/functions/mcp");
+      const { disconnectMcp } = await import("@/lib/mcp-server-fn");
       await disconnectMcp();
       sessionStorage.removeItem("swiggy_mcp_token");
       sessionStorage.removeItem("swiggy_oauth_state");

@@ -139,9 +139,13 @@ interface ExchangeResult {
 
 async function exchangeCode(code: string, codeVerifier: string): Promise<ExchangeResult> {
   try {
-    // Call our server function which proxies to Swiggy's MCP token endpoint
-    const { exchangeOAuthCode } = await import("@/server/functions/mcp");
-    return await exchangeOAuthCode({ data: { code, codeVerifier } });
+    // Call Swiggy's MCP token endpoint via our server proxy.
+    // We use a server function (exchangeOAuthCode) which lives in
+    // a server-only module — TanStack Start's build tool handles
+    // the RPC bridge automatically when we import it.
+    const mod = await import("@/lib/mcp-server-fn");
+    const exchangeFn = mod.exchangeOAuthCode;
+    return await exchangeFn({ data: { code, codeVerifier } });
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : "Network error" };
   }
