@@ -214,7 +214,7 @@ export function AgentChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
-  const [revealed, setRevealed] = useState(0);
+  const [revealedSteps, setRevealedSteps] = useState<Record<string, number>>({});
   const [mcpStatus, setMcpStatus] = useState<McpConnectionStatus>("disconnected");
   const [mcpError, setMcpError] = useState<string | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(true);
@@ -229,7 +229,7 @@ export function AgentChat() {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, revealed]);
+  }, [messages, revealedSteps]);
 
   // Cleanup timers on unmount
   useEffect(() => () => timersRef.current.forEach(clearTimeout), []);
@@ -301,7 +301,6 @@ export function AgentChat() {
     setShowSuggestions(false);
     timersRef.current.forEach(clearTimeout);
     timersRef.current = [];
-    setRevealed(0);
 
     // Add user message
     addUserMessage(query);
@@ -311,7 +310,7 @@ export function AgentChat() {
       const token = getAccessToken();
 
       // ── Classify intent ───────────────────────────────
-      const { classifyIntent, executePlan } = await import("@/lib/mcp-tools");
+      const { classifyIntent } = await import("@/lib/mcp-tools");
       const route = classifyIntent(query);
       const plan = route.plan(query);
       const isReal = !!token;
@@ -340,7 +339,6 @@ export function AgentChat() {
           continue;
         }
 
-        // Use real MCP if authenticated, else add simulated step
         if (!isReal || !token) {
           steps.push({
             server: item.server,
@@ -350,7 +348,6 @@ export function AgentChat() {
           continue;
         }
 
-        // Make the proxied MCP call
         const result = await proxyMcpToolCall({
           data: {
             server: item.server,
@@ -389,28 +386,33 @@ export function AgentChat() {
         ? "I need you to connect your Swiggy account first."
         : plan.answer;
 
-      const agentRun: AgentRun = {
-        intent: plan.intent,
-        plan: plan.plan,
-        steps,
-        answer,
-      };
+      const agentMsgId = uid();
 
-      // Animate steps being revealed
-      steps.forEach((_, i) => {
-        timersRef.current.push(
-          setTimeout(() => setRevealed(i + 1), 280 * (i + 1))
-        );
-      });
-
-      // Add agent message
+      // Add agent message immediately (with all steps, revealed count = 0)
       addMessage({
-        id: uid(),
+        id: agentMsgId,
         role: "agent",
         content: answer,
         timestamp: Date.now(),
         steps,
       });
+
+      // Start per-message step reveal animation
+      steps.forEach((_, i) => {
+        timersRef.current.push(
+          setTimeout(() => {
+            setRevealedSteps((prev) => ({ ...prev, [agentMsgId]: i + 1 }));
+          }, 280 * (i + 1))
+        );
+      });
+
+      const finalReveal = 280 * (steps.length + 1);
+      timersRef.current.push(
+        setTimeout(() => {
+          setRevealedSteps((prev) => ({ ...prev, [agentMsgId]: (steps?.length ?? 0) + 1 }));
+          setIsProcessing(false);
+        }, finalReveal)
+      );
 
       // After all steps revealed, if actionable show order card
       const intentLower = plan.intent.toLowerCase();
@@ -452,14 +454,6 @@ export function AgentChat() {
           }, revealDelay)
         );
       }
-
-      const finalReveal = 280 * (steps.length + 1);
-      timersRef.current.push(
-        setTimeout(() => {
-          setRevealed(steps.length + 1);
-          setIsProcessing(false);
-        }, finalReveal)
-      );
     } catch (err) {
       addSystemMessage(
         err instanceof Error ? err.message : "Something went wrong. Please try again.",
@@ -549,9 +543,10 @@ export function AgentChat() {
 
   function clearChat() {
     setMessages([]);
-    setRevealed(0);
+    setRevealedSteps({});
     setShowSuggestions(true);
     setInput("");
+    setIsProcessing(false);
     timersRef.current.forEach(clearTimeout);
     timersRef.current = [];
     inputRef.current?.focus();
@@ -710,17 +705,17 @@ export function AgentChat() {
                         </div>
 
                         {msg.steps && msg.steps.length > 0 && (
-                          <StepList steps={msg.steps} revealed={revealed} />
+                          <StepList steps={msg.steps} revealed={revealedSteps[msg.id] ?? 0} />
                         )}
 
-                        {revealed >= (msg.steps?.length ?? 0) + 1 && (
+                        {(revealedSteps[msg.id] ?? 0) >= (msg.steps?.length ?? 0) + 1 && (
                           <div className="mt-3 flex gap-2.5 rounded-xl border border-primary/20 bg-primary/5 p-3">
                             <Zap className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                             <p className="text-sm leading-relaxed">{msg.content}</p>
                           </div>
                         )}
 
-                        {isProcessing && revealed <= (msg.steps?.length ?? 0) && (
+                        {isProcessing && msg.steps && (revealedSteps[msg.id] ?? 0) <= msg.steps.length && (
                           <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground/70">
                             <span className="flex gap-0.5">
                               <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/50" style={{ animationDelay: "0ms" }} />
