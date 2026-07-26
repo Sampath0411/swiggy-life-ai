@@ -132,6 +132,8 @@ function Landing() {
             </Link>
             <Link
               to="/dashboard"
+              search={{ mode: "student" }}
+
               className="rounded-xl border border-border bg-secondary/40 px-6 py-3 text-sm font-semibold transition hover:border-primary/50"
             >
               See the dashboard
