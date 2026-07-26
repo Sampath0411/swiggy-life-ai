@@ -85,9 +85,11 @@ function Landing() {
       <header className="sticky top-0 z-40 border-b border-border/60 bg-background/70 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4">
           <Link to="/" className="flex items-center gap-2">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
-              L
-            </span>
+            <img
+              src="https://cdn.brandfetch.io/ideeTxiKQK/w/480/h/480/theme/dark/icon.jpeg?c=1dxbfHSJFAPEGdCLU4o5B"
+              alt="Swiggy LifeOS"
+              className="h-8 w-8 rounded-lg object-cover"
+            />
             <span className="font-display text-sm font-semibold tracking-tight">
               Swiggy <span className="text-gradient">LifeOS</span>
             </span>
