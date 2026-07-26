@@ -125,55 +125,96 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function Preloader() {
   const [phase, setPhase] = useState<"loading" | "exiting" | "hidden">("loading");
+  const [showLogo, setShowLogo] = useState(false);
+  const [showText, setShowText] = useState(false);
+  const [loadingText, setLoadingText] = useState("Waking up LifeOS…");
 
   useEffect(() => {
+    // Staggered entrance animation
+    const t1 = setTimeout(() => setShowLogo(true), 200);
+    const t2 = setTimeout(() => setShowText(true), 500);
+
+    // Cycle through loading messages
+    const messages = [
+      "Waking up LifeOS…",
+      "Connecting Swiggy MCP…",
+      "Loading your smart lifestyle…",
+      "Almost ready…",
+    ];
+    let msgIdx = 0;
+    const msgInterval = setInterval(() => {
+      msgIdx = (msgIdx + 1) % messages.length;
+      setLoadingText(messages[msgIdx]);
+    }, 1200);
+
     const finish = () => {
+      clearInterval(msgInterval);
       setPhase("exiting");
-      setTimeout(() => setPhase("hidden"), 500);
+      setTimeout(() => setPhase("hidden"), 600);
     };
 
     if (document.readyState === "complete") {
-      // Let the preloader breathe a moment before disappearing
-      setTimeout(finish, 700);
+      setTimeout(finish, 1000);
     } else {
-      const onLoad = () => setTimeout(finish, 700);
+      const onLoad = () => setTimeout(finish, 1000);
       window.addEventListener("load", onLoad);
-      // Safety net: hide after 5s no matter what
-      const safety = setTimeout(() => setPhase("hidden"), 5000);
+      const safety = setTimeout(() => {
+        setPhase("exiting");
+        setTimeout(() => setPhase("hidden"), 600);
+      }, 6000);
       return () => {
         window.removeEventListener("load", onLoad);
         clearTimeout(safety);
+        clearInterval(msgInterval);
       };
     }
+
+    return () => {
+      clearInterval(msgInterval);
+    };
   }, []);
 
   if (phase === "hidden") return null;
 
   return (
     <div
-      className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-8 bg-background will-change-[opacity,transform] transition-all duration-500 ${
+      className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-8 bg-background will-change-[opacity,transform] transition-all duration-600 ${
         phase === "exiting"
-          ? "pointer-events-none scale-95 opacity-0"
+          ? "pointer-events-none scale-[1.03] opacity-0 blur-sm"
           : "opacity-100"
       }`}
     >
-      {/* Aurora glow behind the icon */}
+      {/* Aurora glow behind */}
       <div className="pointer-events-none fixed inset-0 -z-10 aurora animate-aurora" />
 
-      <div className="relative flex items-center justify-center">
-        {/* Outer glow ring */}
-        <div className="absolute -inset-8 rounded-full bg-primary/15 blur-3xl animate-pulse" />
+      {/* Animated brand logo with rings */}
+      <div
+        className={`relative flex items-center justify-center transition-all duration-700 ${
+          showLogo ? "scale-100 opacity-100" : "scale-75 opacity-0"
+        }`}
+      >
+        {/* Outer glow */}
+        <div className="absolute -inset-10 rounded-full bg-primary/10 blur-3xl animate-pulse" />
 
-        {/* Outer spinner ring (counter-clockwise, slow) */}
+        {/* Ring 3 — outermost (counter-clockwise, dashed) */}
         <div
-          className="absolute -inset-5 rounded-3xl border-2 border-transparent border-l-primary/40 border-b-accent/30 animate-spin"
-          style={{ animationDirection: "reverse", animationDuration: "2.4s" }}
+          className="absolute -inset-8 rounded-full border border-dashed border-transparent border-l-primary/30 border-b-accent/20"
+          style={{ animation: "spin 3.5s linear infinite reverse" }}
         />
 
-        {/* Inner spinner ring (clockwise, faster) */}
-        <div className="absolute -inset-3 rounded-2xl border-2 border-transparent border-t-primary border-r-primary/60 animate-spin" />
+        {/* Ring 2 — middle (clockwise, solid) */}
+        <div
+          className="absolute -inset-5 rounded-2xl border-2 border-transparent border-t-primary/50 border-r-primary/30"
+          style={{ animation: "spin 2s linear infinite" }}
+        />
 
-        {/* Icon */}
+        {/* Ring 1 — inner (counter-clockwise, accent) */}
+        <div
+          className="absolute -inset-2.5 rounded-xl border border-transparent border-l-accent/40 border-b-accent/25"
+          style={{ animation: "spin 1.2s linear infinite reverse" }}
+        />
+
+        {/* Logo */}
         <div className="relative h-16 w-16 overflow-hidden rounded-2xl bg-background shadow-2xl ring-1 ring-white/10">
           <img
             src="https://cdn.brandfetch.io/ideeTxiKQK/w/480/h/480/theme/dark/icon.jpeg?c=1dxbfHSJFAPEGdCLU4o5B"
@@ -183,14 +224,36 @@ function Preloader() {
         </div>
       </div>
 
-      {/* Brand text */}
-      <div className="flex flex-col items-center gap-2 text-center">
+      {/* Brand text — staggered fade in */}
+      <div
+        className={`flex flex-col items-center gap-3 text-center transition-all duration-500 ${
+          showText ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
+        }`}
+      >
         <span className="font-display text-xl font-semibold tracking-tight">
           Swiggy <span className="text-gradient">LifeOS</span>
         </span>
-        <span className="text-xs text-muted-foreground animate-pulse">
-          Loading your lifestyle OS…
-        </span>
+
+        {/* Animated loading dots */}
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-70" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
+          </span>
+          <span key={loadingText} className="animate-rise inline-block">
+            {loadingText}
+          </span>
+        </div>
+
+        {/* Subtle loading bar */}
+        <div className="mt-1 h-0.5 w-32 overflow-hidden rounded-full bg-secondary">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-primary via-accent to-primary"
+            style={{
+              animation: "loadingBar 1.6s ease-in-out infinite",
+            }}
+          />
+        </div>
       </div>
     </div>
   );

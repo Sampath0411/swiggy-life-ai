@@ -25,7 +25,7 @@ function getAccessToken(): string | null {
     const raw = sessionStorage.getItem("swiggy_mcp_token");
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (parsed.expires_at && Date.now() > parsed.expires_at) {
+    if (parsed.expires_at && Date.now() > parsed.expires_at - 60_000) {
       sessionStorage.removeItem("swiggy_mcp_token");
       return null;
     }
@@ -35,7 +35,7 @@ function getAccessToken(): string | null {
   }
 }
 
-async function runRealAgent(query: string): Promise<{ run: AgentRun; real: boolean }> {
+async function runRealAgent(query: string): Promise<{ run: AgentRun; real: boolean; fallbackMessage?: string }> {
   const token = getAccessToken();
   if (!token) {
     const run = simulatedRunAgent(query);
@@ -69,27 +69,65 @@ async function runRealAgent(query: string): Promise<{ run: AgentRun; real: boole
       (steps as any[]).push({
         server: item.server,
         tool: item.tool,
-        detail: result.success ? "✅ Completed" : `⚠️ ${result.error ?? "Failed"}`,
+        detail: result.success ? describeToolResult(item.tool, result.result) : `⚠️ ${result.error ?? "Failed"}`,
         result: result.result,
       });
     }
 
-    // Generate honest answer based on results
+    // Generate honest answer based on actual results
     const successfulSteps = steps.filter(
       (s) => s.server !== "agent" && s.detail && !s.detail.startsWith("⚠️") && !s.detail.startsWith("🔐")
     );
-    const hasData = successfulSteps.some((s) => !s.detail.includes("0 ") && s.detail !== "✅ Completed");
+
+    // Use word-boundary regex to avoid false positives like "10 saved" matching "0 saved"
+    const zeroPattern = /\b0\s+(saved|products?|items?|coupons?|slots?|frequent)/;
+    const hasData = successfulSteps.some((s) => !zeroPattern.test(s.detail) && s.detail !== "✅ Completed");
     const answer = hasData
-      ? successfulSteps.map((s) => s.detail).join(". ") + "."
+      ? successfulSteps
+          .filter((s) => !s.detail.includes("Cart updated") && !s.detail.includes("Order placed"))
+          .map((s) => s.detail)
+          .join(". ") + "."
       : "Connected to Swiggy but didn't find any data. You may need to save a delivery address in your Swiggy account first.";
 
     return {
       run: { intent: plan.intent, plan: plan.plan, steps, answer },
       real: true,
     };
-  } catch {
+  } catch (err) {
+    // Notify user that we're falling back to simulation
+    const message = `⚠️ Real MCP call failed (${err instanceof Error ? err.message : "network error"}). Showing simulated preview.`;
     const run = simulatedRunAgent(query);
-    return { run, real: false };
+    return { run, real: false, fallbackMessage: message };
+  }
+}
+
+// ─── Tool result summariser ────────────────────────────────────────
+
+function describeToolResult(tool: string, result: unknown): string {
+  if (!result) return "✅ Completed";
+  const r = result as Record<string, unknown>;
+
+  switch (tool) {
+    case "get_addresses": {
+      const addrs = Array.isArray(r.addresses ?? r.data) ? (r.addresses ?? r.data) as Array<{ label?: string }> : [];
+      return addrs.length > 0
+        ? `Found ${addrs.length} address${addrs.length !== 1 ? "es" : ""}: ${addrs.map((a) => a.label).join(", ")}`
+        : "No saved addresses found";
+    }
+    case "search_restaurants": {
+      const rs = Array.isArray(r.restaurants ?? r.data) ? (r.restaurants ?? r.data) as Array<{ name?: string }> : [];
+      return rs.length > 0
+        ? `Found ${rs.length} restaurant${rs.length !== 1 ? "s" : ""} · ${rs.slice(0, 3).map((rest: { name?: string }) => rest.name).join(", ")}`
+        : "No restaurants found";
+    }
+    case "search_products": {
+      const ps = Array.isArray(r.products ?? r.data) ? (r.products ?? r.data) as Array<{ name?: string }> : [];
+      return ps.length > 0
+        ? `Found ${ps.length} product${ps.length !== 1 ? "s" : ""}`
+        : "No products found";
+    }
+    default:
+      return "✅ Completed";
   }
 }
 
@@ -118,6 +156,7 @@ export function AgentConsole({ compact = false }: { compact?: boolean }) {
   const [done, setDone] = useState(false);
   const [isReal, setIsReal] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
+  const [fallbackMessage, setFallbackMessage] = useState<string | null>(null);
 
   const [mcpStatus, setMcpStatus] = useState<McpConnectionStatus>("disconnected");
   const [mcpError, setMcpError] = useState<string | null>(null);
@@ -150,12 +189,16 @@ export function AgentConsole({ compact = false }: { compact?: boolean }) {
 
   const handleDisconnect = useCallback(async () => {
     try {
-      const { disconnectMcp } = await import("@/lib/mcp-server-fn");
-      await disconnectMcp();
-      sessionStorage.removeItem("swiggy_mcp_token");
-      sessionStorage.removeItem("swiggy_oauth_state");
-      sessionStorage.removeItem("swiggy_code_verifier");
+      const raw = sessionStorage.getItem("swiggy_mcp_token");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const { disconnectMcp } = await import("@/lib/mcp-server-fn");
+        await disconnectMcp({ data: { accessToken: parsed.access_token } });
+      }
     } catch { /* ignore */ }
+    sessionStorage.removeItem("swiggy_mcp_token");
+    sessionStorage.removeItem("swiggy_oauth_state");
+    sessionStorage.removeItem("swiggy_code_verifier");
     setMcpStatus("disconnected");
     setMcpError(null);
   }, []);
@@ -169,11 +212,13 @@ export function AgentConsole({ compact = false }: { compact?: boolean }) {
     setRun(null);
     setRevealed(0);
     setDone(false);
+    setFallbackMessage(null);
 
     try {
-      const { run: agentRun, real } = await runRealAgent(query);
+      const { run: agentRun, real, fallbackMessage: fbMsg } = await runRealAgent(query);
       setRun(agentRun);
       setIsReal(real);
+      if (fbMsg) setFallbackMessage(fbMsg);
 
       agentRun.steps.forEach((_, i) => {
         timers.current.push(setTimeout(() => setRevealed(i + 1), 360 * (i + 1)));
@@ -185,6 +230,7 @@ export function AgentConsole({ compact = false }: { compact?: boolean }) {
       const fallback = simulatedRunAgent(query);
       setRun(fallback);
       setIsReal(false);
+      setFallbackMessage("⚠️ An unexpected error occurred. Showing simulated preview.");
       fallback.steps.forEach((_, i) => {
         timers.current.push(setTimeout(() => setRevealed(i + 1), 360 * (i + 1)));
       });
@@ -253,6 +299,12 @@ export function AgentConsole({ compact = false }: { compact?: boolean }) {
               <p className="text-xs uppercase tracking-widest text-muted-foreground">{run.intent} · {run.plan}</p>
               {isReal && <span className="shrink-0 rounded-full bg-instamart/10 px-2 py-0.5 text-[10px] text-instamart">Live</span>}
             </div>
+
+            {fallbackMessage && (
+              <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                {fallbackMessage}
+              </div>
+            )}
             <ol className="space-y-2">
               {run.steps.slice(0, revealed).map((s, i) => (
                 <li key={i} className="animate-rise flex items-start gap-3 text-sm">

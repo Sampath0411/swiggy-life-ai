@@ -8,7 +8,7 @@
  * calls. When disconnected, they fall back to the simulator.
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Plug, Unplug, Loader2, CheckCircle2, XCircle, ExternalLink, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -31,7 +31,7 @@ interface McpConnectProps {
 }
 
 function formatExpiry(expiresAt: number | null): string {
-  if (!expiresAt) return "";
+  if (expiresAt === null) return ""; // null = unknown, 0 = epoch (valid but improbable)
   const remaining = expiresAt - Date.now();
   if (remaining <= 0) return "Expired";
   const hours = Math.floor(remaining / 3_600_000);
@@ -51,12 +51,22 @@ export function McpConnect({
   className,
 }: McpConnectProps) {
   const [animating, setAnimating] = useState(false);
+  const animTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => {
+      if (animTimerRef.current) clearTimeout(animTimerRef.current);
+    };
+  }, []);
 
   const handleConnect = useCallback(() => {
     setAnimating(true);
     onConnect?.();
-    // Reset animation after a timeout (in case OAuth redirect takes time)
-    setTimeout(() => setAnimating(false), 10_000);
+    // Reset animation after 4s (if OAuth redirect doesn't happen quickly,
+    // it's likely blocked — user shouldn't wait 10s to retry)
+    if (animTimerRef.current) clearTimeout(animTimerRef.current);
+    animTimerRef.current = setTimeout(() => setAnimating(false), 4_000);
   }, [onConnect]);
 
   if (compact) {

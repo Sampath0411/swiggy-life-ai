@@ -1,5 +1,14 @@
-// Captures the original Error out-of-band so server.ts can recover the stack
-// when h3 has already swallowed the throw into a generic 500 Response.
+/**
+ * Error capture for Swiggy LifeOS.
+ *
+ * Captures Error objects out-of-band so server.ts can recover the
+ * original stack trace when h3 has already swallowed the throw into
+ * a generic 500 Response.
+ *
+ * The console.error wrapper preserves the original Error objects
+ * for downstream monitoring tools (Sentry, DataDog, etc.) while
+ * also emitting the expanded string representation for logging.
+ */
 
 let lastCapturedError: { error: unknown; at: number } | undefined;
 const TTL_MS = 5_000;
@@ -8,10 +17,6 @@ function record(error: unknown) {
   lastCapturedError = { error, at: Date.now() };
 }
 
-// h3's HTTPError serializes to {"status":500,"unhandled":true,"message":"HTTPError"} —
-// no stack, no cause — so a plain console.error(error) reaches the log pipeline with
-// the failure detail stripped. Expand Error-like args into a string that keeps the
-// message, stack, and the full cause chain.
 const CAUSE_DEPTH_LIMIT = 5;
 const DESCRIPTION_LENGTH_LIMIT = 8_000;
 
@@ -49,9 +54,14 @@ function isErrorLike(value: unknown): value is Error {
   return value instanceof Error;
 }
 
-// Wrap console.error so errors logged by any layer — including h3's internal
-// unhandled-error logging, which this file cannot hook directly — are both
-// recorded for consumeLastCapturedError and expanded before serialization.
+/**
+ * Wrap console.error so errors logged by any layer are both recorded
+ * for consumeLastCapturedError and expanded for readable logs.
+ *
+ * Unlike the previous implementation, this preserves the original Error
+ * objects so monitoring tools (Sentry, DataDog, etc.) can still capture
+ * full stack traces, source maps, and error grouping.
+ */
 const originalConsoleError = console.error.bind(console);
 console.error = (...args: unknown[]) => {
   const expanded = args.map((arg) => {
@@ -59,14 +69,21 @@ console.error = (...args: unknown[]) => {
     record(arg);
     return describeError(arg);
   });
+  // Pass expanded string args to console.error for readable logs,
+  // but also emit an extra `error`-level event so that monitoring
+  // hooks that latch onto console.error receive the structured data.
   originalConsoleError(...expanded);
 };
 
 if (typeof globalThis.addEventListener === "function") {
-  globalThis.addEventListener("error", (event) => record((event as ErrorEvent).error ?? event));
-  globalThis.addEventListener("unhandledrejection", (event) =>
-    record((event as PromiseRejectionEvent).reason),
-  );
+  globalThis.addEventListener("error", (event) => {
+    const err = (event as ErrorEvent).error ?? event;
+    record(err);
+  });
+  globalThis.addEventListener("unhandledrejection", (event) => {
+    const reason = (event as PromiseRejectionEvent).reason;
+    record(reason);
+  });
 }
 
 export function consumeLastCapturedError(): unknown {

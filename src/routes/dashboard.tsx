@@ -1,4 +1,5 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import {
   Activity,
   Bell,
@@ -14,10 +15,12 @@ import {
 import { AgentConsole } from "@/components/lifeos/agent-console";
 import { LIFE_MODES, MEMORY_FACTS, type LifeModeId } from "@/lib/lifeos";
 import { cn } from "@/lib/utils";
+import { getTimeGreeting, getDisplayName } from "@/lib/user-info";
 
 export const Route = createFileRoute("/dashboard")({
   validateSearch: (s: Record<string, unknown>) => ({
     mode: (typeof s.mode === "string" ? s.mode : "student") as LifeModeId,
+    oauth: typeof s.oauth === "string" ? s.oauth : undefined,
   }),
   head: () => ({
     meta: [
@@ -66,14 +69,19 @@ function Stat({
   label,
   value,
   sub,
+  delay = 0,
 }: {
   icon: typeof Flame;
   label: string;
   value: string;
   sub: string;
+  delay?: number;
 }) {
   return (
-    <div className="glass rounded-2xl p-4">
+    <div
+      className="glass rounded-2xl p-4 animate-rise"
+      style={{ animationDelay: `${delay}ms` }}
+    >
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <Icon className="h-3.5 w-3.5 text-primary" /> {label}
       </div>
@@ -88,14 +96,19 @@ function Card({
   icon: Icon,
   children,
   className,
+  delay = 0,
 }: {
   title: string;
   icon: typeof Flame;
   children: React.ReactNode;
   className?: string;
+  delay?: number;
 }) {
   return (
-    <section className={cn("glass rounded-3xl p-5", className)}>
+    <section
+      className={cn("glass rounded-3xl p-5 animate-rise", className)}
+      style={{ animationDelay: `${delay}ms` }}
+    >
       <h2 className="flex items-center gap-2 text-sm font-semibold">
         <Icon className="h-4 w-4 text-primary" /> {title}
       </h2>
@@ -105,16 +118,57 @@ function Card({
 }
 
 function Dashboard() {
-  const { mode } = Route.useSearch();
+  const { mode, oauth } = Route.useSearch();
+  const navigate = useNavigate();
   const active = LIFE_MODES.find((m) => m.id === mode) ?? LIFE_MODES[0];
+
+  const [greeting, setGreeting] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [showConnectedBanner, setShowConnectedBanner] = useState(false);
+
+  useEffect(() => {
+    setGreeting(getTimeGreeting());
+    setDisplayName(getDisplayName());
+
+    // Show connected banner if redirected from OAuth
+    if (oauth === "connected") {
+      setShowConnectedBanner(true);
+      // Clean the param from URL so banner doesn't reappear on refresh
+      navigate({ search: { mode }, replace: true });
+      const timer = setTimeout(() => setShowConnectedBanner(false), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [oauth]);
 
   return (
     <main className="relative min-h-screen px-5 py-8">
       <div className="pointer-events-none fixed inset-0 -z-10 aurora animate-aurora" />
 
       <div className="mx-auto max-w-6xl">
+        {/* Connected banner */}
+        <div
+          className={cn(
+            "mb-4 flex items-center gap-3 overflow-hidden rounded-2xl border border-instamart/30 bg-instamart/10 px-4 py-3 text-sm text-instamart transition-all duration-500",
+            showConnectedBanner
+              ? "max-h-20 translate-y-0 opacity-100"
+              : "pointer-events-none max-h-0 -translate-y-4 opacity-0",
+          )}
+        >
+          <Sparkles className="h-4 w-4 shrink-0" />
+          <span>
+            Swiggy account connected successfully! Your MCP calls will use live data.
+          </span>
+          <button
+            onClick={() => setShowConnectedBanner(false)}
+            className="ml-auto shrink-0 rounded-full p-1 transition hover:bg-instamart/20"
+            aria-label="Dismiss"
+          >
+            <span className="text-xs">&times;</span>
+          </button>
+        </div>
+
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
+          <div className="animate-rise" style={{ animationDelay: "0ms" }}>
             <Link to="/" className="text-xs text-muted-foreground transition hover:text-foreground">
               ← Swiggy LifeOS
             </Link>
@@ -123,11 +177,14 @@ function Dashboard() {
               Agent Chat
             </Link>
             <h1 className="mt-2 text-3xl font-bold">
-              Good evening, Aarav. <span className="text-gradient">{active.name} Mode</span>
+              {greeting}, {displayName}. <span className="text-gradient">{active.name} Mode</span>
             </h1>
             <p className="text-sm text-muted-foreground">{active.outcome}</p>
           </div>
-          <div className="flex flex-wrap gap-1.5">
+          <div
+            className="flex flex-wrap gap-1.5 animate-rise"
+            style={{ animationDelay: "100ms" }}
+          >
             {LIFE_MODES.map((m) => (
               <Link
                 key={m.id}
@@ -147,15 +204,15 @@ function Dashboard() {
         </div>
 
         <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat icon={IndianRupee} label="Budget left" value="₹4,180" sub="of ₹9,000 · 11 days" />
-          <Stat icon={Flame} label="Calories today" value="1,420" sub="Protein 96g / 150g" />
-          <Stat icon={Activity} label="Lifestyle score" value="82" sub="+6 this week" />
-          <Stat icon={PackageCheck} label="Decisions saved" value="47" sub="this week by LifeOS" />
+          <Stat icon={IndianRupee} label="Budget left" value="₹4,180" sub="of ₹9,000 · 11 days" delay={120} />
+          <Stat icon={Flame} label="Calories today" value="1,420" sub="Protein 96g / 150g" delay={180} />
+          <Stat icon={Activity} label="Lifestyle score" value="82" sub="+6 this week" delay={240} />
+          <Stat icon={PackageCheck} label="Decisions saved" value="47" sub="this week by LifeOS" delay={300} />
         </div>
 
         <div className="mt-4 grid gap-4 lg:grid-cols-3">
           <div className="space-y-4 lg:col-span-2">
-            <Card title="AI insights · today's plan" icon={Sparkles}>
+            <Card title="AI insights · today's plan" icon={Sparkles} delay={140}>
               <div className="space-y-2">
                 {[
                   "You're ₹320 ahead of pace — I upgraded tonight's dinner pick.",
@@ -175,7 +232,7 @@ function Dashboard() {
             <AgentConsole compact />
 
             <div className="grid gap-4 sm:grid-cols-2">
-              <Card title="Meal timeline" icon={Clock}>
+              <Card title="Meal timeline" icon={Clock} delay={200}>
                 <ol className="space-y-3">
                   {TIMELINE.map((t) => (
                     <li key={t.time} className="flex items-start gap-3 text-sm">
@@ -194,7 +251,7 @@ function Dashboard() {
                 </ol>
               </Card>
 
-              <Card title="Grocery status" icon={ShoppingBasket}>
+              <Card title="Grocery status" icon={ShoppingBasket} delay={260}>
                 <div className="space-y-3">
                   {PANTRY.map((p) => (
                     <div key={p.item}>
@@ -217,13 +274,13 @@ function Dashboard() {
               </Card>
             </div>
 
-            <Card title="Monthly analytics" icon={Activity}>
+            <Card title="Monthly analytics" icon={Activity} delay={320}>
               <div className="flex h-32 items-end gap-1.5">
                 {[42, 58, 35, 71, 64, 80, 52, 47, 66, 74, 39, 61].map((v, i) => (
                   <div
                     key={i}
-                    className="flex-1 rounded-t-md bg-primary/70 transition hover:bg-primary"
-                    style={{ height: `${v}%` }}
+                    className="flex-1 rounded-t-md bg-primary/70 transition hover:bg-primary animate-rise"
+                    style={{ height: `${v}%`, animationDelay: `${400 + i * 40}ms` }}
                     title={`Week day ${i + 1}`}
                   />
                 ))}
@@ -235,7 +292,7 @@ function Dashboard() {
           </div>
 
           <div className="space-y-4">
-            <Card title="Upcoming deliveries" icon={Truck}>
+            <Card title="Upcoming deliveries" icon={Truck} delay={180}>
               <div className="space-y-2 text-sm">
                 {[
                   { t: "Instamart · 12 items", s: "Today 6:30 PM" },
@@ -253,7 +310,7 @@ function Dashboard() {
               </div>
             </Card>
 
-            <Card title={`${active.name} widgets`} icon={Users}>
+            <Card title={`${active.name} widgets`} icon={Users} delay={240}>
               <div className="flex flex-wrap gap-2">
                 {active.widgets.map((w) => (
                   <span
@@ -266,7 +323,7 @@ function Dashboard() {
               </div>
             </Card>
 
-            <Card title="Smart reminders" icon={Bell}>
+            <Card title="Smart reminders" icon={Bell} delay={300}>
               <ul className="space-y-2 text-sm text-muted-foreground">
                 {REMINDERS.map((r) => (
                   <li key={r} className="flex gap-2">
@@ -277,7 +334,7 @@ function Dashboard() {
               </ul>
             </Card>
 
-            <Card title="AI memory" icon={Sparkles}>
+            <Card title="AI memory" icon={Sparkles} delay={360}>
               <div className="flex flex-wrap gap-1.5">
                 {MEMORY_FACTS.slice(0, 6).map((f) => (
                   <span

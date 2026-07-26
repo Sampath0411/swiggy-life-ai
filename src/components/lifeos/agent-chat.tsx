@@ -132,7 +132,7 @@ function OrderCard({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
-  const icon = order.type === "food" ? UtensilsCrossed
+  const Icon = order.type === "food" ? UtensilsCrossed
     : order.type === "instamart" ? ShoppingBasket
     : Wine;
 
@@ -149,7 +149,7 @@ function OrderCard({
             : order.type === "instamart" ? "bg-instamart/15 text-instamart"
             : "bg-dineout/15 text-dineout",
         )}>
-          {icon && <icon className="h-4 w-4" />}
+          {Icon && <Icon className="h-4 w-4" />}
         </div>
         <div className="flex-1">
           <p className="text-sm font-semibold">{
@@ -240,7 +240,7 @@ export function AgentChat() {
     if (raw) {
       try {
         const parsed = JSON.parse(raw);
-        if (parsed.access_token && parsed.expires_at && Date.now() < parsed.expires_at) {
+    if (parsed.access_token && parsed.expires_at && Date.now() < parsed.expires_at - 60_000) {
           setMcpStatus("connected");
           return;
         }
@@ -268,12 +268,16 @@ export function AgentChat() {
 
   const handleDisconnect = useCallback(async () => {
     try {
-      const { disconnectMcp } = await import("@/lib/mcp-server-fn");
-      await disconnectMcp();
-      sessionStorage.removeItem("swiggy_mcp_token");
-      sessionStorage.removeItem("swiggy_oauth_state");
-      sessionStorage.removeItem("swiggy_code_verifier");
+      const raw = sessionStorage.getItem("swiggy_mcp_token");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const { disconnectMcp } = await import("@/lib/mcp-server-fn");
+        await disconnectMcp({ data: { accessToken: parsed.access_token } });
+      }
     } catch { /* ignore */ }
+    sessionStorage.removeItem("swiggy_mcp_token");
+    sessionStorage.removeItem("swiggy_oauth_state");
+    sessionStorage.removeItem("swiggy_code_verifier");
     setMcpStatus("disconnected");
     setMcpError(null);
     addSystemMessage("Disconnected from Swiggy MCP.", "info");
@@ -402,9 +406,11 @@ export function AgentChat() {
         (s) => s.server !== "agent" && s.detail && !s.detail.startsWith("⚠️") && !s.detail.startsWith("🔐") && !s.detail.startsWith("(skipped") && !s.detail.startsWith("Connect")
       );
       const hasRealResults = successfulSteps.some((s) => {
-        // Check if the step has non-empty, non-zero results
+        // Use word-boundary regex to avoid false positives like
+        // "10 saved" matching the substring "0 saved"
         const detail = s.detail;
-        return !detail.includes("0 saved") && !detail.includes("0 product") && !detail.includes("0 item") && !detail.includes("0 coupon") && !detail.includes("0 slot") && !detail.includes("0 frequent") && !detail.includes("Cart updated") && !detail.includes("Order placed! ID: —");
+        const zeroPattern = /\b0\s+(saved|product|item|coupon|slot|frequent)/;
+        return !zeroPattern.test(detail) && !detail.includes("Cart updated") && !detail.includes("Order placed! ID: —");
       });
 
       let answer: string;
@@ -584,8 +590,9 @@ export function AgentChat() {
   function handleSuggestionClick(p: string) {
     setInput(p);
     setShowSuggestions(false);
-    // We execute after a brief delay to let state settle
-    setTimeout(() => execute(p), 50);
+    // Execute after a brief delay — tracked in timersRef for cleanup on unmount
+    const timer = setTimeout(() => execute(p), 50);
+    timersRef.current.push(timer);
   }
 
   function onSubmit(e: FormEvent) {
@@ -818,7 +825,7 @@ function getAccessToken(): string | null {
     const raw = sessionStorage.getItem("swiggy_mcp_token");
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (parsed.expires_at && Date.now() > parsed.expires_at) {
+    if (parsed.expires_at && Date.now() > parsed.expires_at - 60_000) {
       sessionStorage.removeItem("swiggy_mcp_token");
       return null;
     }

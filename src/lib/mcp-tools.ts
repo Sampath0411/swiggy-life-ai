@@ -193,7 +193,7 @@ const INTENT_ROUTES: IntentRoute[] = [
 const FALLBACK_CHAIN: Array<{ server: McpServer | "agent"; tool: string; args?: Record<string, unknown> }> = [
   { server: "agent", tool: "intent.classify", args: { detail: "Routed across Food + Instamart + Dineout" } },
   { server: "food", tool: "search_restaurants", args: { addressId: "", query: "popular" } },
-  { server: "instamart", tool: "get_pantry_state", args: { addressId: "" } },
+  { server: "instamart", tool: "your_go_to_items", args: { addressId: "" } },
   { server: "agent", tool: "memory.write", args: { detail: "Preference saved for next time" } },
 ];
 

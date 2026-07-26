@@ -190,6 +190,7 @@ export interface AgentStep {
   server: McpServer | "agent";
   tool: string;
   detail: string;
+  result?: unknown;
 }
 
 export interface AgentRun {

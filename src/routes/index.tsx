@@ -111,9 +111,18 @@ function Landing() {
 
   const handleDisconnect = useCallback(async () => {
     try {
-      const { disconnectMcp } = await import("@/lib/mcp-server-fn");
-      await disconnectMcp();
+      const raw = sessionStorage.getItem("swiggy_mcp_token");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const { disconnectMcp } = await import("@/lib/mcp-server-fn");
+        // Call Swiggy's /auth/logout to revoke the token server-side
+        await disconnectMcp({ data: { accessToken: parsed.access_token } });
+      }
     } catch { /* ignore */ }
+    // Always clear local state regardless of server response
+    sessionStorage.removeItem("swiggy_mcp_token");
+    sessionStorage.removeItem("swiggy_oauth_state");
+    sessionStorage.removeItem("swiggy_code_verifier");
     setMcpStatus("disconnected");
   }, []);
 
