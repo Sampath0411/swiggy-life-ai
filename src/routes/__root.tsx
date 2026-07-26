@@ -7,7 +7,7 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -123,11 +123,85 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+function Preloader() {
+  const [phase, setPhase] = useState<"loading" | "exiting" | "hidden">("loading");
+
+  useEffect(() => {
+    const finish = () => {
+      setPhase("exiting");
+      setTimeout(() => setPhase("hidden"), 500);
+    };
+
+    if (document.readyState === "complete") {
+      // Let the preloader breathe a moment before disappearing
+      setTimeout(finish, 700);
+    } else {
+      const onLoad = () => setTimeout(finish, 700);
+      window.addEventListener("load", onLoad);
+      // Safety net: hide after 5s no matter what
+      const safety = setTimeout(() => setPhase("hidden"), 5000);
+      return () => {
+        window.removeEventListener("load", onLoad);
+        clearTimeout(safety);
+      };
+    }
+  }, []);
+
+  if (phase === "hidden") return null;
+
+  return (
+    <div
+      className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-8 bg-background will-change-[opacity,transform] transition-all duration-500 ${
+        phase === "exiting"
+          ? "pointer-events-none scale-95 opacity-0"
+          : "opacity-100"
+      }`}
+    >
+      {/* Aurora glow behind the icon */}
+      <div className="pointer-events-none fixed inset-0 -z-10 aurora animate-aurora" />
+
+      <div className="relative flex items-center justify-center">
+        {/* Outer glow ring */}
+        <div className="absolute -inset-8 rounded-full bg-primary/15 blur-3xl animate-pulse" />
+
+        {/* Outer spinner ring (counter-clockwise, slow) */}
+        <div
+          className="absolute -inset-5 rounded-3xl border-2 border-transparent border-l-primary/40 border-b-accent/30 animate-spin"
+          style={{ animationDirection: "reverse", animationDuration: "2.4s" }}
+        />
+
+        {/* Inner spinner ring (clockwise, faster) */}
+        <div className="absolute -inset-3 rounded-2xl border-2 border-transparent border-t-primary border-r-primary/60 animate-spin" />
+
+        {/* Icon */}
+        <div className="relative h-16 w-16 overflow-hidden rounded-2xl bg-background shadow-2xl ring-1 ring-white/10">
+          <img
+            src="https://cdn.brandfetch.io/ideeTxiKQK/w/480/h/480/theme/dark/icon.jpeg?c=1dxbfHSJFAPEGdCLU4o5B"
+            alt="Swiggy"
+            className="h-full w-full object-cover"
+          />
+        </div>
+      </div>
+
+      {/* Brand text */}
+      <div className="flex flex-col items-center gap-2 text-center">
+        <span className="font-display text-xl font-semibold tracking-tight">
+          Swiggy <span className="text-gradient">LifeOS</span>
+        </span>
+        <span className="text-xs text-muted-foreground animate-pulse">
+          Loading your lifestyle OS…
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
   return (
     <QueryClientProvider client={queryClient}>
+      <Preloader />
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
     </QueryClientProvider>
