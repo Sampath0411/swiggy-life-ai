@@ -18,10 +18,8 @@ import {
 } from "react";
 import {
   Sparkles,
-  CornerDownLeft,
   Loader2,
   Bot,
-  User,
   CheckCircle2,
   XCircle,
   ShoppingBasket,
@@ -30,15 +28,10 @@ import {
   AlertCircle,
   SendHorizonal,
   Trash2,
-  Plug,
-  ExternalLink,
-  LogOut,
-  Clock,
   Zap,
   ChevronDown,
 } from "lucide-react";
-import { runAgent as simulatedRunAgent, SAMPLE_PROMPTS } from "@/lib/lifeos";
-import { classifyIntent } from "@/lib/mcp-tools";
+import { SAMPLE_PROMPTS } from "@/lib/lifeos";
 import { cn } from "@/lib/utils";
 import type { AgentRun, AgentStep } from "@/lib/lifeos";
 import { McpConnect, type McpConnectionStatus } from "./mcp-connect";
@@ -241,6 +234,22 @@ export function AgentChat() {
   // Cleanup timers on unmount
   useEffect(() => () => timersRef.current.forEach(clearTimeout), []);
 
+  // ── Detect existing token on mount ──────────────────
+  useEffect(() => {
+    const raw = sessionStorage.getItem("swiggy_mcp_token");
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (parsed.access_token && parsed.expires_at && Date.now() < parsed.expires_at) {
+          setMcpStatus("connected");
+          return;
+        }
+      } catch { /* ignore corrupt token */ }
+      // Expired or corrupt — clean up
+      sessionStorage.removeItem("swiggy_mcp_token");
+    }
+  }, []);
+
   // ── OAuth handlers ──────────────────────────────────
   const handleConnect = useCallback(async () => {
     setMcpStatus("connecting");
@@ -292,26 +301,100 @@ export function AgentChat() {
     setShowSuggestions(false);
     timersRef.current.forEach(clearTimeout);
     timersRef.current = [];
+    setRevealed(0);
 
     // Add user message
     addUserMessage(query);
     setIsProcessing(true);
 
     try {
-      // Get the agent run result
-      let agentRun: AgentRun;
-      let isReal = false;
+      const token = getAccessToken();
 
-      try {
-        const { runMcpAgent } = await import("@/lib/mcp-tools");
-        const token = getAccessToken();
-        agentRun = await runMcpAgent(query, token);
-        isReal = !!token;
-      } catch {
-        agentRun = simulatedRunAgent(query);
+      // ── Classify intent ───────────────────────────────
+      const { classifyIntent, executePlan } = await import("@/lib/mcp-tools");
+      const route = classifyIntent(query);
+      const plan = route.plan(query);
+      const isReal = !!token;
+
+      // ── Execute via server proxy (avoids CORS) ────────
+      const { proxyMcpToolCall } = await import("@/lib/mcp-server-fn");
+      const steps: AgentStep[] = [];
+      let abortedEarly = false;
+
+      for (const item of plan.serverChain) {
+        if (abortedEarly) {
+          steps.push({
+            server: item.server,
+            tool: item.tool,
+            detail: "(skipped — prior step needed user input)",
+          });
+          continue;
+        }
+
+        if (item.server === "agent") {
+          steps.push({
+            server: "agent",
+            tool: item.tool,
+            detail: (item.args?.detail as string) ?? `Processing intent…`,
+          });
+          continue;
+        }
+
+        // Use real MCP if authenticated, else add simulated step
+        if (!isReal || !token) {
+          steps.push({
+            server: item.server,
+            tool: item.tool,
+            detail: "🔐 Connect Swiggy for live data",
+          });
+          continue;
+        }
+
+        // Make the proxied MCP call
+        const result = await proxyMcpToolCall({
+          data: {
+            server: item.server,
+            toolName: item.tool,
+            args: item.args ?? {},
+            accessToken: token,
+          },
+        });
+
+        if (result.success) {
+          steps.push({
+            server: item.server,
+            tool: item.tool,
+            detail: describeProxyResult(item.tool, result.result),
+            result: result.result,
+          });
+        } else if (result.authError) {
+          steps.push({
+            server: item.server,
+            tool: item.tool,
+            detail: "🔐 Authentication required. Please reconnect Swiggy.",
+          });
+          abortedEarly = true;
+          setMcpStatus("error");
+          setMcpError("Session expired — please disconnect and reconnect");
+        } else {
+          steps.push({
+            server: item.server,
+            tool: item.tool,
+            detail: `⚠️ ${result.error ?? "Tool call failed"}`,
+          });
+        }
       }
 
-      const steps = agentRun.steps;
+      const answer = abortedEarly
+        ? "I need you to connect your Swiggy account first."
+        : plan.answer;
+
+      const agentRun: AgentRun = {
+        intent: plan.intent,
+        plan: plan.plan,
+        steps,
+        answer,
+      };
 
       // Animate steps being revealed
       steps.forEach((_, i) => {
@@ -320,33 +403,38 @@ export function AgentChat() {
         );
       });
 
-      // Add agent message with all steps
+      // Add agent message
       addMessage({
         id: uid(),
         role: "agent",
-        content: agentRun.answer,
+        content: answer,
         timestamp: Date.now(),
         steps,
       });
 
-      // After all steps revealed, if it's an actionable intent show an order card
-      const intentLower = agentRun.intent.toLowerCase();
+      // After all steps revealed, if actionable show order card
+      const intentLower = plan.intent.toLowerCase();
       const hasOrderIntent =
         intentLower.includes("grocery") ||
         intentLower.includes("food delivery") ||
         intentLower.includes("reorder") ||
         intentLower.includes("budget") ||
-        intentLower.includes("fitness");
+        intentLower.includes("fitness") ||
+        intentLower.includes("dineout") ||
+        intentLower.includes("table");
 
-      if (hasOrderIntent && steps.length > 0) {
-        // Wait for steps to finish revealing, then show the card
+      if (hasOrderIntent && steps.length > 0 && !abortedEarly) {
         const revealDelay = 280 * (steps.length + 1) + 400;
         timersRef.current.push(
           setTimeout(() => {
             const orderType: "food" | "instamart" | "dineout" =
-              steps.some((s) => s.server === "instamart") ? "instamart"
-              : steps.some((s) => s.server === "dineout") ? "dineout"
+              steps.some((s) => s.server === "instamart" && !s.detail.startsWith("⚠️") && !s.detail.startsWith("🔐")) ? "instamart"
+              : steps.some((s) => s.server === "dineout"  && !s.detail.startsWith("⚠️") && !s.detail.startsWith("🔐")) ? "dineout"
               : "food";
+
+            const hasLiveResults = steps.some(
+              (s) => s.server !== "agent" && !s.detail.startsWith("⚠️") && !s.detail.startsWith("🔐") && !s.detail.startsWith("(skipped") && !s.detail.startsWith("Connect")
+            );
 
             addMessage({
               id: uid(),
@@ -355,9 +443,9 @@ export function AgentChat() {
               timestamp: Date.now(),
               order: {
                 type: orderType,
-                summary: agentRun.answer.slice(0, 120) + (agentRun.answer.length > 120 ? "…" : ""),
-                total: 0,
-                items: 0,
+                summary: hasLiveResults
+                  ? "Your order is ready to be placed with Swiggy."
+                  : `${answer.slice(0, 120)}${answer.length > 120 ? "…" : ""}`,
                 actionLabel: orderType === "dineout" ? "Confirm booking" : "Place order",
               },
             });
@@ -365,7 +453,6 @@ export function AgentChat() {
         );
       }
 
-      // Update revealed count past the final step
       const finalReveal = 280 * (steps.length + 1);
       timersRef.current.push(
         setTimeout(() => {
@@ -373,17 +460,61 @@ export function AgentChat() {
           setIsProcessing(false);
         }, finalReveal)
       );
-
-      // Add memory context note for follow-up awareness
-      if (steps.some((s) => s.tool.includes("memory") || s.tool.includes("intent"))) {
-        addSystemMessage("Context saved — I'll remember this for follow-up questions.", "info");
-      }
     } catch (err) {
       addSystemMessage(
         err instanceof Error ? err.message : "Something went wrong. Please try again.",
         "error"
       );
       setIsProcessing(false);
+    }
+  }
+
+  // ─── Proxy result summariser ─────────────────────────
+
+  function describeProxyResult(tool: string, result: unknown): string {
+    if (!result) return "Completed.";
+    const r = result as Record<string, unknown>;
+
+    switch (tool) {
+      case "get_addresses": {
+        const addrs = Array.isArray(r.addresses ?? r.data) ? (r.addresses ?? r.data) as Array<{ label?: string }> : [];
+        return `Found ${addrs.length} saved address${addrs.length !== 1 ? "es" : ""}${addrs.length > 0 ? ": " + addrs.map((a: { label?: string }) => a.label).join(", ") : ""}`;
+      }
+      case "search_restaurants": {
+        const rs = Array.isArray(r.restaurants ?? r.data) ? (r.restaurants ?? r.data) as Array<{ name?: string }> : [];
+        return `Found ${rs.length} restaurant${rs.length !== 1 ? "s" : ""}${rs.length > 0 ? " · " + rs.slice(0, 3).map((rest: { name?: string }) => rest.name).join(", ") : ""}`;
+      }
+      case "search_restaurants_dineout": {
+        const drs = Array.isArray(r.restaurants ?? r.data) ? (r.restaurants ?? r.data) as Array<{ name?: string }> : [];
+        return `Found ${drs.length} dining restaurant${drs.length !== 1 ? "s" : ""}${drs.length > 0 ? " · " + drs.slice(0, 3).map((rest: { name?: string }) => rest.name).join(", ") : ""}`;
+      }
+      case "get_restaurant_menu":
+      case "get_restaurant_details":
+        return `Loaded details for "${r.name ?? r.restaurantName ?? "restaurant"}"`;
+      case "get_food_cart":
+      case "get_cart":
+        return `Cart total: ₹${r.total ?? "—"} with ${Array.isArray(r.items) ? r.items.length : 0} item(s)`;
+      case "update_food_cart":
+      case "update_cart":
+        return "Cart updated";
+      case "fetch_food_coupons":
+        return `Found ${Array.isArray(r.coupons ?? r.data) ? (r.coupons ?? r.data).length : 0} coupon(s)`;
+      case "place_food_order":
+      case "checkout":
+        return `Order placed! ID: ${r.orderId ?? r.order?.orderId ?? "—"}`;
+      case "track_food_order":
+      case "track_order":
+        return `Status: ${r.status ?? "in transit"}`;
+      case "your_go_to_items":
+        return `Loaded ${Array.isArray(r.items ?? r.data) ? (r.items ?? r.data).length : 0} frequent item(s)`;
+      case "get_available_slots":
+        return `${Array.isArray(r.slots ?? r.data) ? (r.slots ?? r.data).length : 0} slot(s) available`;
+      case "book_table":
+        return `Table booked! ID: ${r.bookingId ?? r.id ?? "—"}`;
+      case "search_products":
+        return `Found ${Array.isArray(r.products ?? r.data) ? (r.products ?? r.data).length : 0} product(s)`;
+      default:
+        return "Completed";
     }
   }
 

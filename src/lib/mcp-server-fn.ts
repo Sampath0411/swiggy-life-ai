@@ -146,6 +146,91 @@ export const disconnectMcp = createServerFn({ method: "POST" })
   });
 
 // ═══════════════════════════════════════════════════════════════════
+// 5. Proxy MCP tool calls (server-side, avoids CORS)
+// ═══════════════════════════════════════════════════════════════════
+
+const MCP_LABELS: Record<McpServer, string> = {
+  food: "Food MCP",
+  instamart: "Instamart MCP",
+  dineout: "Dineout MCP",
+};
+
+/**
+ * Proxy an MCP tool call through the server.
+ *
+ * The browser CANNOT call Swiggy MCP endpoints directly (CORS).
+ * This server function does the fetch server-to-server and returns
+ * the result — the client only sees the parsed response.
+ */
+export const proxyMcpToolCall = createServerFn({ method: "POST" })
+  .handler(async ({ data }: {
+    data: {
+      server: McpServer;
+      toolName: string;
+      args: Record<string, unknown>;
+      accessToken?: string;
+    };
+  }): Promise<{
+    success: boolean;
+    result?: unknown;
+    error?: string;
+    authError?: boolean;
+    status?: number;
+  }> => {
+    const { server, toolName, args, accessToken } = data;
+    const url = MCP_SERVER_URLS[server];
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    };
+    if (accessToken) {
+      headers["Authorization"] = `Bearer ${accessToken}`;
+    }
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: toolName, arguments: args },
+        }),
+        signal: AbortSignal.timeout(15_000),
+      });
+
+      if (response.status === 401) {
+        return { success: false, authError: true, error: "Authentication required", status: 401 };
+      }
+
+      if (!response.ok) {
+        let detail = "";
+        try {
+          const errBody = await response.json();
+          detail = errBody?.error?.message ?? JSON.stringify(errBody);
+        } catch {
+          detail = await response.text().catch(() => "");
+        }
+        return { success: false, error: `${MCP_LABELS[server]} returned ${response.status}: ${detail}`, status: response.status };
+      }
+
+      const rpc = await response.json() as { result?: unknown; error?: { message: string; code: number } };
+      if (rpc.error) {
+        return { success: false, error: `${MCP_LABELS[server]} error: ${rpc.error.message}` };
+      }
+
+      return { success: true, result: rpc.result };
+    } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === "TimeoutError") {
+        return { success: false, error: `${MCP_LABELS[server]} timed out` };
+      }
+      return { success: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+
+// ═══════════════════════════════════════════════════════════════════
 // PKCE helpers
 // ═══════════════════════════════════════════════════════════════════
 

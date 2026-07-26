@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ArrowRight,
   Brain,
@@ -80,6 +80,21 @@ const DECISIONS = [
 function Landing() {
   // ── MCP connection state ────────────────────────────────
   const [mcpStatus, setMcpStatus] = useState<McpConnectionStatus>("disconnected");
+
+  // Detect existing token on mount
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("swiggy_mcp_token");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.access_token && parsed.expires_at && Date.now() < parsed.expires_at) {
+          setMcpStatus("connected");
+        } else {
+          sessionStorage.removeItem("swiggy_mcp_token");
+        }
+      }
+    } catch { /* ignore */ }
+  }, []);
 
   const handleConnect = useCallback(async () => {
     setMcpStatus("connecting");

@@ -20,11 +20,56 @@ import { McpConnect, type McpConnectionStatus } from "./mcp-connect";
 
 // ─── Server-side MCP runner ───────────────────────────────────
 
-async function runRealAgent(query: string): Promise<{ run: AgentRun; real: boolean }> {
+function getAccessToken(): string | null {
   try {
-    const { runMcpAgent } = await import("@/lib/mcp-tools");
-    const run = await runMcpAgent(query, null);
+    const raw = sessionStorage.getItem("swiggy_mcp_token");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed.expires_at && Date.now() > parsed.expires_at) {
+      sessionStorage.removeItem("swiggy_mcp_token");
+      return null;
+    }
+    return parsed.access_token ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function runRealAgent(query: string): Promise<{ run: AgentRun; real: boolean }> {
+  const token = getAccessToken();
+  if (!token) {
+    const run = simulatedRunAgent(query);
     return { run, real: false };
+  }
+
+  try {
+    // Use the server-proxied MCP calls to avoid CORS
+    const { classifyIntent } = await import("@/lib/mcp-tools");
+    const { proxyMcpToolCall } = await import("@/lib/mcp-server-fn");
+
+    const route = classifyIntent(query);
+    const plan = route.plan(query);
+
+    const steps: AgentStep[] = [];
+    for (const item of plan.serverChain) {
+      if (item.server === "agent") {
+        steps.push({ server: "agent", tool: item.tool, detail: (item.args?.detail as string) ?? "Processing…" });
+        continue;
+      }
+      const result = await proxyMcpToolCall({
+        data: { server: item.server, toolName: item.tool, args: item.args ?? {}, accessToken: token },
+      });
+      steps.push({
+        server: item.server,
+        tool: item.tool,
+        detail: result.success ? "✅ Completed" : `⚠️ ${result.error ?? "Failed"}`,
+      });
+    }
+
+    return {
+      run: { intent: plan.intent, plan: plan.plan, steps, answer: plan.answer },
+      real: true,
+    };
   } catch {
     const run = simulatedRunAgent(query);
     return { run, real: false };
@@ -63,6 +108,13 @@ export function AgentConsole({ compact = false }: { compact?: boolean }) {
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
+
+  // ── Detect existing token on mount ──────────────────
+  useEffect(() => {
+    if (getAccessToken()) {
+      setMcpStatus("connected");
+    }
+  }, []);
 
   const handleConnect = useCallback(async () => {
     setMcpStatus("connecting");
