@@ -22,11 +22,11 @@ export const Route = createFileRoute("/")({
         content:
           "An AI lifestyle operating system on Swiggy MCP. One agent orchestrates Food, Instamart and Dineout to run your meals, groceries, dining and routines.",
       },
-      { property: "og:title", content: "Swiggy LifeOS — Zero Daily Decisions" },
+      { property: "og:title", content: "Swiggy LifeOS — Your Life. One AI. Zero Daily Decisions." },
       {
         property: "og:description",
         content:
-          "Outcome-based memberships powered by AI agents across Swiggy Food, Instamart and Dineout MCP servers.",
+          "An AI lifestyle operating system on Swiggy MCP. One agent orchestrates Food, Instamart and Dineout to run your meals, groceries, dining and routines.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

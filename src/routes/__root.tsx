@@ -77,13 +77,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Swiggy LifeOS" },
-      { name: "description", content: "Your Life. One AI. Zero Daily Decisions." },
+      { title: "Swiggy LifeOS — Your Life. One AI. Zero Daily Decisions." },
+      { name: "description", content: "An AI lifestyle operating system on Swiggy MCP. One agent orchestrates Food, Instamart and Dineout to run your meals, groceries, dining and routines." },
       { name: "author", content: "Swiggy LifeOS" },
-      { property: "og:title", content: "Swiggy LifeOS" },
-      { property: "og:description", content: "Your Life. One AI. Zero Daily Decisions." },
+      { property: "og:title", content: "Swiggy LifeOS — Your Life. One AI. Zero Daily Decisions." },
+      { property: "og:description", content: "An AI lifestyle operating system on Swiggy MCP. One agent orchestrates Food, Instamart and Dineout to run your meals, groceries, dining and routines." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "Swiggy LifeOS — Your Life. One AI. Zero Daily Decisions." },
+      { name: "twitter:description", content: "An AI lifestyle operating system on Swiggy MCP. One agent orchestrates Food, Instamart and Dineout to run your meals, groceries, dining and routines." },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/4f7d7cf0-8c2f-469d-8151-8481a57dc173" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/4f7d7cf0-8c2f-469d-8151-8481a57dc173" },
     ],
     links: [
       {
@@ -96,7 +100,6 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         rel: "stylesheet",
         href: "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap",
       },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
     ],
   }),
 
