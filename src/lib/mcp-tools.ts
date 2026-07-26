@@ -299,7 +299,7 @@ export async function executePlan(
 
 // ─── Template argument resolver ────────────────────────────────────
 
-function resolveArgs(
+export function resolveArgs(
   template: Record<string, unknown> | undefined,
   query: string,
   steps: AgentStep[],

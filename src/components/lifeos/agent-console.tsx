@@ -44,7 +44,7 @@ async function runRealAgent(query: string): Promise<{ run: AgentRun; real: boole
 
   try {
     // Use the server-proxied MCP calls to avoid CORS
-    const { classifyIntent } = await import("@/lib/mcp-tools");
+    const { classifyIntent, resolveArgs } = await import("@/lib/mcp-tools");
     const { proxyMcpToolCall } = await import("@/lib/mcp-server-fn");
 
     const route = classifyIntent(query);
@@ -56,13 +56,15 @@ async function runRealAgent(query: string): Promise<{ run: AgentRun; real: boole
         steps.push({ server: "agent", tool: item.tool, detail: (item.args?.detail as string) ?? "Processing…" });
         continue;
       }
+      const resolvedArgs = resolveArgs(item.args, query, steps as any);
       const result = await proxyMcpToolCall({
-        data: { server: item.server, toolName: item.tool, args: item.args ?? {}, accessToken: token },
+        data: { server: item.server, toolName: item.tool, args: resolvedArgs, accessToken: token },
       });
-      steps.push({
+      (steps as any[]).push({
         server: item.server,
         tool: item.tool,
         detail: result.success ? "✅ Completed" : `⚠️ ${result.error ?? "Failed"}`,
+        result: result.result,
       });
     }
 

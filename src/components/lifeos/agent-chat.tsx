@@ -310,7 +310,7 @@ export function AgentChat() {
       const token = getAccessToken();
 
       // ── Classify intent ───────────────────────────────
-      const { classifyIntent } = await import("@/lib/mcp-tools");
+      const { classifyIntent, resolveArgs } = await import("@/lib/mcp-tools");
       const route = classifyIntent(query);
       const plan = route.plan(query);
       const isReal = !!token;
@@ -348,11 +348,13 @@ export function AgentChat() {
           continue;
         }
 
+        // Make the proxied MCP call with resolved args
+        const resolvedArgs = resolveArgs(item.args, query, steps as any);
         const result = await proxyMcpToolCall({
           data: {
             server: item.server,
             toolName: item.tool,
-            args: item.args ?? {},
+            args: resolvedArgs,
             accessToken: token,
           },
         });
