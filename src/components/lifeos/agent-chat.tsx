@@ -348,6 +348,19 @@ export function AgentChat() {
           continue;
         }
 
+        // Skip checkout/order/track if previous steps had no items or no order
+        const isOrderTool = ["checkout", "place_food_order", "track_order", "track_food_order", "get_booking_status"].includes(item.tool);
+        const hasEmptyCart = steps.some((s) => s.detail.includes("0 item") || s.detail.includes("₹—"));
+        const hasNoOrder = steps.some((s) => s.detail.includes("ID: —"));
+        if (isOrderTool && (hasEmptyCart || hasNoOrder)) {
+          steps.push({
+            server: item.server,
+            tool: item.tool,
+            detail: `⏭️ Skipped — nothing to ${item.tool.replace("_", " ")}`,
+          });
+          continue;
+        }
+
         // Make the proxied MCP call with resolved args
         const resolvedArgs = resolveArgs(item.args, query, steps as any);
         const result = await proxyMcpToolCall({

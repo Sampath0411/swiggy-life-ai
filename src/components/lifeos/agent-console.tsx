@@ -57,6 +57,12 @@ async function runRealAgent(query: string): Promise<{ run: AgentRun; real: boole
         continue;
       }
       const resolvedArgs = resolveArgs(item.args, query, steps as any);
+      // Skip checkout/track if cart was empty
+      const isOrderTool = ["checkout", "place_food_order", "track_order", "track_food_order", "get_booking_status"].includes(item.tool);
+      if (isOrderTool && steps.some((s) => s.detail.includes("0 item") || s.detail.includes("₹—") || s.detail.includes("ID: —"))) {
+        steps.push({ server: item.server as any, tool: item.tool, detail: `⏭️ Skipped — nothing to ${item.tool.replace("_", " ")}` });
+        continue;
+      }
       const result = await proxyMcpToolCall({
         data: { server: item.server, toolName: item.tool, args: resolvedArgs, accessToken: token },
       });
