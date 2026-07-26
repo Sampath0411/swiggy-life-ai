@@ -1,5 +1,8 @@
 // Core LifeOS domain model: lifestyle modes (outcome-based memberships),
 // Swiggy MCP server catalog, and the client-side agent orchestration simulator.
+//
+// This file also serves as the fallback when no OAuth token is available.
+// For real MCP calls, see mcp-client.ts and mcp-tools.ts.
 
 export type McpServer = "food" | "instamart" | "dineout";
 
@@ -109,12 +112,15 @@ export const LIFE_MODES: LifeMode[] = [
   },
 ];
 
-// MCP Server endpoints
+// ─── MCP server endpoints ──────────────────────────────────────────
+
 export const MCP_ENDPOINTS = {
   food: "https://mcp.swiggy.com/food",
   instamart: "https://mcp.swiggy.com/im",
   dineout: "https://mcp.swiggy.com/dineout",
 } as const;
+
+// ─── MCP server catalog (display + real endpoint info) ─────────────
 
 export const MCP_SERVERS: Record<
   McpServer,
@@ -125,11 +131,20 @@ export const MCP_SERVERS: Record<
     blurb: "Restaurant discovery, menus, ordering, live delivery tracking.",
     endpoint: MCP_ENDPOINTS.food,
     tools: [
-      "food.search_restaurants",
-      "food.get_menu",
-      "food.place_order",
-      "food.track_delivery",
-      "food.split_bill",
+      "search_restaurants",
+      "search_menu",
+      "get_restaurant_menu",
+      "get_addresses",
+      "update_food_cart",
+      "get_food_cart",
+      "flush_food_cart",
+      "fetch_food_coupons",
+      "apply_food_coupon",
+      "place_food_order",
+      "get_food_orders",
+      "get_food_order_details",
+      "track_food_order",
+      "report_error",
     ],
   },
   instamart: {
@@ -137,11 +152,19 @@ export const MCP_SERVERS: Record<
     blurb: "Grocery discovery, pantry state, recurring orders, inventory suggestions.",
     endpoint: MCP_ENDPOINTS.instamart,
     tools: [
-      "instamart.search_products",
-      "instamart.get_pantry_state",
-      "instamart.add_to_cart",
-      "instamart.schedule_recurring",
-      "instamart.checkout",
+      "search_products",
+      "your_go_to_items",
+      "get_addresses",
+      "create_address",
+      "delete_address",
+      "update_cart",
+      "get_cart",
+      "clear_cart",
+      "checkout",
+      "get_orders",
+      "get_order_details",
+      "track_order",
+      "report_error",
     ],
   },
   dineout: {
@@ -149,13 +172,19 @@ export const MCP_SERVERS: Record<
     blurb: "Table availability, reservations, offers, date-night planning.",
     endpoint: MCP_ENDPOINTS.dineout,
     tools: [
-      "dineout.search_availability",
-      "dineout.compare_ratings",
-      "dineout.reserve_table",
-      "dineout.get_offers",
+      "search_restaurants_dineout",
+      "get_restaurant_details",
+      "get_saved_locations",
+      "get_available_slots",
+      "create_cart",
+      "book_table",
+      "get_booking_status",
+      "report_error",
     ],
   },
 };
+
+// ─── Agent orchestration types ─────────────────────────────────────
 
 export interface AgentStep {
   server: McpServer | "agent";
@@ -169,6 +198,8 @@ export interface AgentRun {
   steps: AgentStep[];
   answer: string;
 }
+
+// ─── Client-side simulator (fallback when no OAuth token) ─────────
 
 const RUNS: { match: RegExp; run: (q: string) => AgentRun }[] = [
   {
@@ -281,6 +312,8 @@ export const SAMPLE_PROMPTS = [
   "Plan a surprise dinner for Friday",
   "I'm hosting five friends tonight",
 ];
+
+// ─── Onboarding ────────────────────────────────────────────────────
 
 export interface OnboardingQuestion {
   id: string;

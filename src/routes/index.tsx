@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useCallback, useState } from "react";
 import {
   ArrowRight,
   Brain,
@@ -11,6 +12,7 @@ import {
   Wine,
 } from "lucide-react";
 import { AgentConsole } from "@/components/lifeos/agent-console";
+import { McpConnect, type McpConnectionStatus } from "@/components/lifeos/mcp-connect";
 import { LIFE_MODES, MCP_SERVERS, MEMORY_FACTS } from "@/lib/lifeos";
 
 export const Route = createFileRoute("/")({
@@ -76,6 +78,30 @@ const DECISIONS = [
 ];
 
 function Landing() {
+  // ── MCP connection state ────────────────────────────────
+  const [mcpStatus, setMcpStatus] = useState<McpConnectionStatus>("disconnected");
+
+  const handleConnect = useCallback(async () => {
+    setMcpStatus("connecting");
+    try {
+      const { initOAuth } = await import("@/server/functions/mcp");
+      const { authorizeUrl, state, codeVerifier } = await initOAuth();
+      sessionStorage.setItem("swiggy_oauth_state", state);
+      sessionStorage.setItem("swiggy_code_verifier", codeVerifier);
+      window.location.href = authorizeUrl;
+    } catch {
+      setMcpStatus("error");
+    }
+  }, []);
+
+  const handleDisconnect = useCallback(async () => {
+    try {
+      const { disconnectMcp } = await import("@/server/functions/mcp");
+      await disconnectMcp();
+    } catch { /* ignore */ }
+    setMcpStatus("disconnected");
+  }, []);
+
   return (
     <main className="relative overflow-x-hidden">
       <div className="pointer-events-none fixed inset-0 -z-10 aurora animate-aurora" />
@@ -100,12 +126,20 @@ function Landing() {
             <a href="#mcp" className="transition hover:text-foreground">MCP</a>
             <a href="#demo" className="transition hover:text-foreground">Live demo</a>
           </nav>
-          <Link
-            to="/onboarding"
-            className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:opacity-90"
-          >
-            Get started
-          </Link>
+          <div className="flex items-center gap-3">
+            <McpConnect
+              status={mcpStatus}
+              onConnect={handleConnect}
+              onDisconnect={handleDisconnect}
+              compact
+            />
+            <Link
+              to="/onboarding"
+              className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:opacity-90"
+            >
+              Get started
+            </Link>
+          </div>
         </div>
       </header>
 
