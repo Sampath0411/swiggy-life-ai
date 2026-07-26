@@ -68,8 +68,17 @@ async function runRealAgent(query: string): Promise<{ run: AgentRun; real: boole
       });
     }
 
+    // Generate honest answer based on results
+    const successfulSteps = steps.filter(
+      (s) => s.server !== "agent" && s.detail && !s.detail.startsWith("⚠️") && !s.detail.startsWith("🔐")
+    );
+    const hasData = successfulSteps.some((s) => !s.detail.includes("0 ") && s.detail !== "✅ Completed");
+    const answer = hasData
+      ? successfulSteps.map((s) => s.detail).join(". ") + "."
+      : "Connected to Swiggy but didn't find any data. You may need to save a delivery address in your Swiggy account first.";
+
     return {
-      run: { intent: plan.intent, plan: plan.plan, steps, answer: plan.answer },
+      run: { intent: plan.intent, plan: plan.plan, steps, answer },
       real: true,
     };
   } catch {

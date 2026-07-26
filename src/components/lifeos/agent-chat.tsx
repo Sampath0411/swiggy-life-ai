@@ -384,9 +384,37 @@ export function AgentChat() {
         }
       }
 
-      const answer = abortedEarly
-        ? "I need you to connect your Swiggy account first."
-        : plan.answer;
+	    // ── Generate honest answer based on actual results ──
+      const successfulSteps = steps.filter(
+        (s) => s.server !== "agent" && s.detail && !s.detail.startsWith("⚠️") && !s.detail.startsWith("🔐") && !s.detail.startsWith("(skipped") && !s.detail.startsWith("Connect")
+      );
+      const hasRealResults = successfulSteps.some((s) => {
+        // Check if the step has non-empty, non-zero results
+        const detail = s.detail;
+        return !detail.includes("0 saved") && !detail.includes("0 product") && !detail.includes("0 item") && !detail.includes("0 coupon") && !detail.includes("0 slot") && !detail.includes("0 frequent") && !detail.includes("Cart updated") && !detail.includes("Order placed! ID: —");
+      });
+
+      let answer: string;
+      let showOrderCard = false;
+
+      if (abortedEarly) {
+        answer = "I need you to connect your Swiggy account first.";
+      } else if (!hasRealResults && !isReal) {
+        answer = plan.answer;
+      } else if (!hasRealResults && isReal) {
+        // Connected but got empty results
+        const emptySteps = successfulSteps.map((s) => s.detail).join("; ");
+        answer = `I connected to Swiggy but didn't find any data to work with. ${emptySteps ? `Results: ${emptySteps}` : "You may need to save a delivery address in your Swiggy account first."} Try searching for a specific product or restaurant.`;
+      } else {
+        // We have real results — use a dynamic summary
+        const resultSummaries = successfulSteps
+          .filter((s) => !s.detail.includes("Cart updated") && !s.detail.includes("Order placed"))
+          .map((s) => s.detail);
+        answer = resultSummaries.length > 0
+          ? `Here's what I found: ${resultSummaries.join(". ")}. What would you like to do next?`
+          : plan.answer;
+        showOrderCard = true;
+      }
 
       const agentMsgId = uid();
 
@@ -416,29 +444,15 @@ export function AgentChat() {
         }, finalReveal)
       );
 
-      // After all steps revealed, if actionable show order card
-      const intentLower = plan.intent.toLowerCase();
-      const hasOrderIntent =
-        intentLower.includes("grocery") ||
-        intentLower.includes("food delivery") ||
-        intentLower.includes("reorder") ||
-        intentLower.includes("budget") ||
-        intentLower.includes("fitness") ||
-        intentLower.includes("dineout") ||
-        intentLower.includes("table");
-
-      if (hasOrderIntent && steps.length > 0 && !abortedEarly) {
+      // After all steps revealed, show order card only if real results exist
+      if (showOrderCard && steps.length > 0 && !abortedEarly) {
         const revealDelay = 280 * (steps.length + 1) + 400;
         timersRef.current.push(
           setTimeout(() => {
             const orderType: "food" | "instamart" | "dineout" =
-              steps.some((s) => s.server === "instamart" && !s.detail.startsWith("⚠️") && !s.detail.startsWith("🔐")) ? "instamart"
-              : steps.some((s) => s.server === "dineout"  && !s.detail.startsWith("⚠️") && !s.detail.startsWith("🔐")) ? "dineout"
+              steps.some((s) => s.server === "instamart" && !s.detail.startsWith("⚠️") && !s.detail.startsWith("🔐") && !s.detail.includes("0 product") && !s.detail.includes("0 saved")) ? "instamart"
+              : steps.some((s) => s.server === "dineout" && !s.detail.startsWith("⚠️") && !s.detail.startsWith("🔐") && !s.detail.includes("0 slot")) ? "dineout"
               : "food";
-
-            const hasLiveResults = steps.some(
-              (s) => s.server !== "agent" && !s.detail.startsWith("⚠️") && !s.detail.startsWith("🔐") && !s.detail.startsWith("(skipped") && !s.detail.startsWith("Connect")
-            );
 
             addMessage({
               id: uid(),
@@ -447,9 +461,7 @@ export function AgentChat() {
               timestamp: Date.now(),
               order: {
                 type: orderType,
-                summary: hasLiveResults
-                  ? "Your order is ready to be placed with Swiggy."
-                  : `${answer.slice(0, 120)}${answer.length > 120 ? "…" : ""}`,
+                summary: "Your order is ready to be placed with Swiggy.",
                 actionLabel: orderType === "dineout" ? "Confirm booking" : "Place order",
               },
             });
